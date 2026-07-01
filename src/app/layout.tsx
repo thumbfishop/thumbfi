@@ -24,6 +24,9 @@ export const metadata: Metadata = {
     description: "Generate viral thumbnails in seconds with AI. Powered by $THUMB.",
     type: "website",
   },
+  other: {
+    "ory-verify": "orynth-2e8989be9bf546ce9fb4bb53cc636c2e",
+  },
 };
 
 export default function RootLayout({
