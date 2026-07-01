@@ -3,9 +3,11 @@
 import { useState, useRef } from "react"
 import { motion } from "framer-motion"
 import {
-  Wand2, Clock,
+  Wand2, Loader2, Download, TrendingUp, RefreshCw, AlertCircle,
 } from "lucide-react"
-import type { ThumbnailStyle, ThumbnailCategory, ThumbnailTone, ColorPalette } from "@/types"
+import type { ThumbnailStyle, ThumbnailCategory, ThumbnailTone, ColorPalette, GenerationRequest } from "@/types"
+import type { GeneratedThumbnail } from "@/lib/ai/types"
+import { generateThumbnailsAction } from "@/lib/actions/generate"
 
 const STYLES: { key: ThumbnailStyle; label: string; desc: string; emoji: string }[] = [
   { key: "dramatic",    label: "Dramatic",    desc: "Bold contrast, high impact",    emoji: "🔥" },
@@ -60,12 +62,45 @@ export default function GeneratePage() {
   const [palette, setPalette] = useState<ColorPalette>("auto")
   const [aspectRatio, setAspectRatio] = useState("16:9")
   const [count, setCount] = useState(4)
-  const [comingSoon, setComingSoon] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [results, setResults] = useState<GeneratedThumbnail[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
 
-  const handleGenerate = () => {
-    if (!prompt.trim()) return
-    setComingSoon(true)
+  const handleGenerate = async () => {
+    if (!prompt.trim() || loading) return
+    setLoading(true)
+    setError(null)
+    setResults(null)
+    try {
+      const req: GenerationRequest = {
+        prompt, style, category, tone,
+        color_palette: palette, aspect_ratio: aspectRatio, count,
+      }
+      const out = await generateThumbnailsAction(req)
+      setResults(out.thumbnails)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Generation failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const downloadImage = async (url: string, name: string) => {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = objUrl
+      a.download = `${name}.png`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(objUrl)
+    } catch {
+      window.open(url, "_blank")
+    }
   }
 
   return (
@@ -249,10 +284,12 @@ export default function GeneratePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.28 }}
             onClick={handleGenerate}
-            disabled={!prompt.trim()}
+            disabled={!prompt.trim() || loading}
             className="w-full py-4 rounded-2xl bg-[#FF7A00] text-white font-black text-sm flex items-center justify-center gap-2 hover:bg-[#e56e00] disabled:opacity-40 transition-all shadow-lg shadow-orange-200 hover:-translate-y-0.5 disabled:translate-y-0"
           >
-            <Wand2 className="w-4 h-4" /> Generate Thumbnails
+            {loading
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+              : <><Wand2 className="w-4 h-4" /> Generate Thumbnails</>}
           </motion.button>
         </div>
 
@@ -262,25 +299,78 @@ export default function GeneratePage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.45 }}
-            className="bg-white rounded-2xl border border-[#EAD9CC]/60 min-h-96"
+            className="bg-white rounded-2xl border border-[#EAD9CC]/60 min-h-96 p-5"
           >
-            {comingSoon ? (
+            {loading ? (
               <div className="flex flex-col items-center justify-center h-full py-20 gap-4 px-8 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-[#FFF7EF] flex items-center justify-center">
-                  <Clock className="w-7 h-7 text-[#FF7A00]" />
+                <Loader2 className="w-10 h-10 text-[#FF7A00] animate-spin" />
+                <div>
+                  <p className="font-black text-[#2D1C12] mb-1">Generating your thumbnails…</p>
+                  <p className="text-sm text-[#9A7560]">Rendering {count} variation{count !== 1 ? "s" : ""} — this can take a few seconds.</p>
+                </div>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-full py-20 gap-4 px-8 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center">
+                  <AlertCircle className="w-7 h-7 text-red-500" />
                 </div>
                 <div>
-                  <p className="font-black text-[#2D1C12] mb-1">AI generation is coming soon</p>
-                  <p className="text-sm text-[#9A7560] leading-relaxed max-w-sm">
-                    The generation engine isn&apos;t connected yet. Your prompt and settings are ready — real thumbnails will appear here once it&apos;s live.
-                  </p>
+                  <p className="font-black text-[#2D1C12] mb-1">Generation failed</p>
+                  <p className="text-sm text-[#9A7560] max-w-sm">{error}</p>
                 </div>
-                <button
-                  onClick={() => setComingSoon(false)}
-                  className="px-4 py-2 rounded-xl border border-[#EAD9CC] text-xs font-semibold text-[#6B3F2A] hover:border-[#FF7A00]/40 transition-all"
-                >
-                  Back
+                <button onClick={handleGenerate} className="px-4 py-2 rounded-xl bg-[#FF7A00] text-white text-sm font-bold hover:bg-[#e56e00] transition-all">
+                  Try again
                 </button>
+              </div>
+            ) : results ? (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="font-black text-[#2D1C12]">{results.length} variation{results.length !== 1 ? "s" : ""} generated</h2>
+                    <p className="text-xs text-[#9A7560] mt-0.5">Hover a thumbnail to download.</p>
+                  </div>
+                  <button
+                    onClick={handleGenerate}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#EAD9CC] text-xs font-bold text-[#6B3F2A] hover:border-[#FF7A00]/40 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {results.map((t, i) => (
+                    <motion.div
+                      key={t.id}
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.4, delay: i * 0.08 }}
+                      className="group relative"
+                    >
+                      <div className="relative rounded-2xl overflow-hidden shadow-lg bg-[#F5EDE3]" style={{ aspectRatio: t.aspect_ratio.replace(":", "/") }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={t.preview_url} alt={t.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <p className="text-white font-black text-sm leading-tight drop-shadow line-clamp-2">{t.title}</p>
+                        </div>
+                        <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-lg text-[10px] font-black text-white shadow-md ${t.ctr_score >= 90 ? "bg-emerald-500" : "bg-[#FF7A00]"}`}>
+                          {t.ctr_score}% CTR
+                        </div>
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <button
+                            onClick={() => downloadImage(t.preview_url, t.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "thumbnail")}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white text-[#2D1C12] font-black text-xs shadow-lg hover:bg-[#FFF7EF]"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5 px-1">
+                        <TrendingUp className="w-3 h-3 text-[#9A7560]" />
+                        <span className="text-[10px] text-[#9A7560] capitalize">{t.style.replace("_", " ")} · {t.aspect_ratio}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-20 gap-4 px-8 text-center">
