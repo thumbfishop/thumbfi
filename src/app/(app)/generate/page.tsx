@@ -1,14 +1,11 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import Link from "next/link"
+import { motion } from "framer-motion"
 import {
-  Wand2, Sparkles, Zap, RefreshCw, Download, Eye, Star,
-  ChevronDown, Check, Loader2, ArrowRight, X
+  Wand2, Clock,
 } from "lucide-react"
-import { generateThumbnails } from "@/lib/api/ai.service"
-import type { ThumbnailStyle, ThumbnailCategory, ThumbnailTone, ColorPalette, GenerationRequest, GenerationResult } from "@/types"
+import type { ThumbnailStyle, ThumbnailCategory, ThumbnailTone, ColorPalette } from "@/types"
 
 const STYLES: { key: ThumbnailStyle; label: string; desc: string; emoji: string }[] = [
   { key: "dramatic",    label: "Dramatic",    desc: "Bold contrast, high impact",    emoji: "🔥" },
@@ -55,126 +52,6 @@ const PALETTES: { key: ColorPalette; label: string; colors: string[] }[] = [
 
 const ASPECT_RATIOS = ["16:9", "9:16", "1:1", "4:3"]
 
-const PROMPT_SUGGESTIONS = [
-  "Bitcoin crashes below $30K — shocked crypto trader reaction",
-  "I made $100K on YouTube in 2025 — here's how",
-  "AI destroyed my career and THIS happened next",
-  "The dark truth about passive income nobody tells you",
-  "I tried every productivity hack for 30 days — results",
-  "Why 99% of people fail at investing",
-]
-
-function VariationCard({ thumb, delay, onFavorite }: {
-  thumb: GenerationResult["thumbnails"][0]
-  delay: number
-  onFavorite: (id: string) => void
-}) {
-  const [fav, setFav] = useState(false)
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      className="group relative"
-    >
-      <div className="relative aspect-video rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow">
-        <div className={`absolute inset-0 bg-gradient-to-br ${thumb.preview_gradient}`}>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-3">
-            <p className="text-white font-black text-xs leading-tight line-clamp-2">{thumb.title}</p>
-          </div>
-        </div>
-
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-            <Link
-              href={`/editor/${thumb.id}`}
-              className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
-            >
-              <Eye className="w-4 h-4 text-white" />
-            </Link>
-            <button className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
-              <Download className="w-4 h-4 text-white" />
-            </button>
-            <button
-              onClick={() => { setFav(!fav); onFavorite(thumb.id) }}
-              className={`w-9 h-9 rounded-xl backdrop-blur-sm flex items-center justify-center transition-all ${fav ? "bg-amber-400/80" : "bg-white/20 hover:bg-white/30"}`}
-            >
-              <Star className={`w-4 h-4 ${fav ? "text-white fill-white" : "text-white"}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* CTR score badge */}
-        <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-lg text-[10px] font-black text-white shadow-md ${
-          thumb.ctr_score >= 90 ? "bg-emerald-500" : "bg-[#FF7A00]"
-        }`}>
-          {thumb.ctr_score}% CTR
-        </div>
-      </div>
-
-      <div className="mt-2 px-1">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-[#2D1C12] truncate">{thumb.title}</p>
-            <p className="text-[10px] text-[#9A7560] capitalize">{thumb.style.replace("_", " ")} · {thumb.aspect_ratio}</p>
-          </div>
-          <Link href={`/editor/${thumb.id}`} className="opacity-0 group-hover:opacity-100 transition-opacity">
-            <ArrowRight className="w-3.5 h-3.5 text-[#FF7A00]" />
-          </Link>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-function GeneratingAnimation() {
-  const stages = [
-    "Analyzing your prompt...",
-    "Selecting optimal style...",
-    "Generating color palette...",
-    "Composing layout...",
-    "Adding text overlays...",
-    "Applying final effects...",
-    "Optimizing for CTR...",
-  ]
-  const [stage, setStage] = useState(0)
-
-  useState(() => {
-    const interval = setInterval(() => {
-      setStage(s => (s + 1) % stages.length)
-    }, 500)
-    return () => clearInterval(interval)
-  })
-
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-6">
-      <div className="relative">
-        <div className="w-16 h-16 rounded-2xl bg-[#FF7A00] flex items-center justify-center">
-          <Wand2 className="w-7 h-7 text-white" />
-        </div>
-        <div className="absolute inset-0 rounded-2xl bg-[#FF7A00] animate-ping opacity-30" />
-      </div>
-      <div className="flex flex-col items-center gap-2">
-        <p className="font-black text-[#2D1C12]">Generating your thumbnails...</p>
-        <p className="text-sm text-[#9A7560]">{stages[stage]}</p>
-      </div>
-      <div className="flex gap-1.5">
-        {[0, 1, 2, 3].map(i => (
-          <motion.div
-            key={i}
-            className="w-2 h-2 rounded-full bg-[#FF7A00]"
-            animate={{ scale: [1, 1.4, 1], opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 0.8, delay: i * 0.15, repeat: Infinity }}
-          />
-        ))}
-      </div>
-      <p className="text-xs text-[#C4A898]">This usually takes 3–5 seconds</p>
-    </div>
-  )
-}
-
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState("")
   const [style, setStyle] = useState<ThumbnailStyle>("dramatic")
@@ -183,21 +60,12 @@ export default function GeneratePage() {
   const [palette, setPalette] = useState<ColorPalette>("auto")
   const [aspectRatio, setAspectRatio] = useState("16:9")
   const [count, setCount] = useState(4)
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<GenerationResult | null>(null)
+  const [comingSoon, setComingSoon] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement>(null)
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() || loading) return
-    setLoading(true)
-    setResult(null)
-    try {
-      const req: GenerationRequest = { prompt, style, category, tone, color_palette: palette, aspect_ratio: aspectRatio, count }
-      const res = await generateThumbnails(req)
-      setResult(res)
-    } finally {
-      setLoading(false)
-    }
+  const handleGenerate = () => {
+    if (!prompt.trim()) return
+    setComingSoon(true)
   }
 
   return (
@@ -223,20 +91,6 @@ export default function GeneratePage() {
               rows={3}
               className="w-full px-4 py-3 rounded-xl border-2 border-[#EAD9CC] bg-[#FFF7EF] focus:outline-none focus:border-[#FF7A00] text-sm text-[#2D1C12] placeholder-[#C4A898] resize-none transition-colors"
             />
-            <div className="mt-2">
-              <p className="text-[10px] font-bold text-[#9A7560] uppercase tracking-wider mb-2">Suggestions</p>
-              <div className="space-y-1">
-                {PROMPT_SUGGESTIONS.slice(0, 3).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => { setPrompt(s); promptRef.current?.focus() }}
-                    className="w-full text-left text-[11px] text-[#6B3F2A] px-3 py-1.5 rounded-lg bg-[#FFF7EF] hover:bg-[#F5EDE3] transition-colors truncate"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
           </motion.div>
 
           {/* Style */}
@@ -395,14 +249,10 @@ export default function GeneratePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.28 }}
             onClick={handleGenerate}
-            disabled={!prompt.trim() || loading}
+            disabled={!prompt.trim()}
             className="w-full py-4 rounded-2xl bg-[#FF7A00] text-white font-black text-sm flex items-center justify-center gap-2 hover:bg-[#e56e00] disabled:opacity-40 transition-all shadow-lg shadow-orange-200 hover:-translate-y-0.5 disabled:translate-y-0"
           >
-            {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-            ) : (
-              <><Wand2 className="w-4 h-4" /> Generate Thumbnails</>
-            )}
+            <Wand2 className="w-4 h-4" /> Generate Thumbnails
           </motion.button>
         </div>
 
@@ -414,50 +264,34 @@ export default function GeneratePage() {
             transition={{ duration: 0.45 }}
             className="bg-white rounded-2xl border border-[#EAD9CC]/60 min-h-96"
           >
-            {loading ? (
-              <GeneratingAnimation />
-            ) : result ? (
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="font-black text-[#2D1C12]">{result.thumbnails.length} Variations Generated</h2>
-                    <p className="text-xs text-[#9A7560] mt-0.5">{result.credits_used} credit{result.credits_used !== 1 ? "s" : ""} used</p>
-                  </div>
-                  <button
-                    onClick={handleGenerate}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#EAD9CC] text-xs font-bold text-[#6B3F2A] hover:border-[#FF7A00]/40 transition-all"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Regenerate
-                  </button>
+            {comingSoon ? (
+              <div className="flex flex-col items-center justify-center h-full py-20 gap-4 px-8 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-[#FFF7EF] flex items-center justify-center">
+                  <Clock className="w-7 h-7 text-[#FF7A00]" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {result.thumbnails.map((t, i) => (
-                    <VariationCard key={t.id} thumb={t} delay={i * 0.1} onFavorite={() => {}} />
-                  ))}
+                <div>
+                  <p className="font-black text-[#2D1C12] mb-1">AI generation is coming soon</p>
+                  <p className="text-sm text-[#9A7560] leading-relaxed max-w-sm">
+                    The generation engine isn&apos;t connected yet. Your prompt and settings are ready — real thumbnails will appear here once it&apos;s live.
+                  </p>
                 </div>
+                <button
+                  onClick={() => setComingSoon(false)}
+                  className="px-4 py-2 rounded-xl border border-[#EAD9CC] text-xs font-semibold text-[#6B3F2A] hover:border-[#FF7A00]/40 transition-all"
+                >
+                  Back
+                </button>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-20 gap-4 px-8 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-[#FFF7EF] flex items-center justify-center">
-                  <Sparkles className="w-7 h-7 text-[#FF7A00]" />
+                  <Wand2 className="w-7 h-7 text-[#FF7A00]" />
                 </div>
                 <div>
                   <p className="font-black text-[#2D1C12] mb-1">Ready to generate</p>
                   <p className="text-sm text-[#9A7560] leading-relaxed">
                     Write a prompt describing your video content, choose a style, and hit Generate.
                   </p>
-                </div>
-                <div className="w-full grid grid-cols-2 gap-2 mt-2">
-                  {PROMPT_SUGGESTIONS.slice(0, 4).map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { setPrompt(s); promptRef.current?.focus() }}
-                      className="text-left text-[11px] text-[#6B3F2A] px-3 py-2 rounded-xl bg-[#FFF7EF] hover:bg-[#F5EDE3] transition-colors"
-                    >
-                      {s}
-                    </button>
-                  ))}
                 </div>
               </div>
             )}

@@ -12,7 +12,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   sidebarCollapsed: false,
   commandPaletteOpen: false,
-  notificationCount: 3,
+  notificationCount: 0,
   setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),

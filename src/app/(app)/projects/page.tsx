@@ -7,8 +7,10 @@ import {
   FolderOpen, Plus, Search, Grid3x3, List, Star, MoreHorizontal,
   Pencil, Trash2, Copy, Archive, SortAsc, Filter, Wand2
 } from "lucide-react"
-import { MOCK_PROJECTS, MOCK_THUMBNAILS } from "@/lib/mock/data"
 import type { Project } from "@/types"
+
+// No projects yet — real projects will load from the backend once connected.
+const PROJECTS: Project[] = []
 
 type SortBy = "updated" | "created" | "name" | "thumbnails"
 type ViewMode = "grid" | "list"
@@ -69,7 +71,6 @@ function ProjectMenu({ project, onRename, onDelete, onDuplicate, onArchive, onFa
 
 function ProjectGridCard({ project, index }: { project: Project; index: number }) {
   const [fav, setFav] = useState(project.is_favorite)
-  const thumb = MOCK_THUMBNAILS.find(t => t.id === project.cover_thumbnail_id)
 
   return (
     <motion.div
@@ -80,13 +81,9 @@ function ProjectGridCard({ project, index }: { project: Project; index: number }
     >
       <Link href="/generate" className="block">
         <div className="h-32 relative overflow-hidden">
-          {thumb ? (
-            <div className={`absolute inset-0 bg-gradient-to-br ${thumb.preview_gradient}`} />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-[#F5EDE3] to-[#EAD9CC] flex items-center justify-center">
-              <FolderOpen className="w-8 h-8 text-[#C4A898]" />
-            </div>
-          )}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#F5EDE3] to-[#EAD9CC] flex items-center justify-center">
+            <FolderOpen className="w-8 h-8 text-[#C4A898]" />
+          </div>
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
           {project.status === "archived" && (
             <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 text-[10px] font-bold text-white/80">
@@ -129,7 +126,6 @@ function ProjectGridCard({ project, index }: { project: Project; index: number }
 
 function ProjectListRow({ project, index }: { project: Project; index: number }) {
   const [fav, setFav] = useState(project.is_favorite)
-  const thumb = MOCK_THUMBNAILS.find(t => t.id === project.cover_thumbnail_id)
 
   return (
     <motion.div
@@ -138,9 +134,7 @@ function ProjectListRow({ project, index }: { project: Project; index: number })
       transition={{ duration: 0.35, delay: index * 0.04 }}
       className="flex items-center gap-4 px-4 py-3.5 bg-white rounded-xl border border-[#EAD9CC]/60 hover:border-[#FF7A00]/20 hover:shadow-sm transition-all"
     >
-      <div className={`w-12 h-8 rounded-lg flex-shrink-0 overflow-hidden bg-gradient-to-br ${
-        thumb?.preview_gradient ?? "from-[#F5EDE3] to-[#EAD9CC]"
-      }`} />
+      <div className="w-12 h-8 rounded-lg flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#F5EDE3] to-[#EAD9CC]" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold text-[#2D1C12] truncate">{project.title}</p>
         <p className="text-[11px] text-[#9A7560] truncate">{project.description}</p>
@@ -172,7 +166,7 @@ export default function ProjectsPage() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [newName, setNewName] = useState("")
 
-  const filtered = MOCK_PROJECTS
+  const filtered = PROJECTS
     .filter(p => showArchived || p.status === "active")
     .filter(p => !search || p.title.toLowerCase().includes(search.toLowerCase()) || p.description?.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {

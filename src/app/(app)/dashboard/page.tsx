@@ -4,17 +4,27 @@ import Link from "next/link"
 import { motion } from "framer-motion"
 import {
   Wand2, TrendingUp, Zap, FolderOpen, ArrowRight,
-  Star, Download, Eye, MoreHorizontal, Sparkles, Clock
+  Sparkles, Image as ImageIcon,
 } from "lucide-react"
 import { useUser } from "@clerk/nextjs"
-import { MOCK_STATS, MOCK_PROJECTS, MOCK_THUMBNAILS } from "@/lib/mock/data"
-import { useState } from "react"
+import type { DashboardStats } from "@/types"
 
 const fade = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0 },
   transition: { duration: 0.45, delay },
 })
+
+// No activity yet — real values will come from the backend once connected.
+const stats: DashboardStats = {
+  total_thumbnails: 0,
+  thumbnails_this_month: 0,
+  avg_ctr_score: 0,
+  credits_used: 0,
+  credits_limit: 20,
+  thumb_balance: 0,
+  active_projects: 0,
+}
 
 function StatCard({ icon: Icon, label, value, suffix, sub, color, bg }: {
   icon: React.ElementType; label: string; value: string; suffix?: string
@@ -35,89 +45,16 @@ function StatCard({ icon: Icon, label, value, suffix, sub, color, bg }: {
   )
 }
 
-function ThumbnailMini({ thumb, delay }: { thumb: typeof MOCK_THUMBNAILS[0]; delay: number }) {
-  const [hover, setHover] = useState(false)
-  return (
-    <motion.div {...fade(delay)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} className="group cursor-pointer">
-      <div className="relative aspect-video rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-shadow">
-        <div className={`absolute inset-0 bg-gradient-to-br ${thumb.preview_gradient}`}>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-2">
-            <p className="text-white font-black text-[8px] leading-tight">{thumb.title}</p>
-          </div>
-        </div>
-        {hover && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center gap-1.5">
-            <Link href={`/editor/${thumb.id}`} className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
-              <Eye className="w-3.5 h-3.5 text-white" />
-            </Link>
-            <button className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
-              <Download className="w-3.5 h-3.5 text-white" />
-            </button>
-          </div>
-        )}
-        <div className={`absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-white ${
-          thumb.ctr_score >= 90 ? "bg-emerald-500/90" : "bg-[#FF7A00]/90"
-        }`}>
-          {thumb.ctr_score}%
-        </div>
-        {thumb.is_favorite && (
-          <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-amber-400/90 flex items-center justify-center">
-            <Star className="w-3 h-3 text-white fill-white" />
-          </div>
-        )}
-      </div>
-      <div className="mt-1.5 px-0.5">
-        <p className="text-[10px] font-semibold text-[#2D1C12] truncate capitalize">{thumb.category.replace("_", " ")}</p>
-        <p className="text-[10px] text-[#9A7560]">{new Date(thumb.created_at).toLocaleDateString()}</p>
-      </div>
-    </motion.div>
-  )
-}
-
-function ProjectCard({ project, delay }: { project: typeof MOCK_PROJECTS[0]; delay: number }) {
-  const thumb = MOCK_THUMBNAILS.find(t => t.id === project.cover_thumbnail_id)
-  return (
-    <motion.div {...fade(delay)} className="bg-white rounded-2xl border border-[#EAD9CC]/60 hover:border-[#FF7A00]/20 hover:shadow-md transition-all overflow-hidden group cursor-pointer">
-      <div className="h-24 relative overflow-hidden">
-        {thumb ? (
-          <div className={`absolute inset-0 bg-gradient-to-br ${thumb.preview_gradient}`} />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[#F5EDE3] to-[#EAD9CC]" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        {project.is_favorite && (
-          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-amber-400/90 flex items-center justify-center">
-            <Star className="w-3 h-3 text-white fill-white" />
-          </div>
-        )}
-        <div className="absolute bottom-2 left-3">
-          <p className="text-white font-black text-xs leading-tight">{project.title}</p>
-        </div>
-      </div>
-      <div className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-[#9A7560]">{project.thumbnail_count} thumbnails</p>
-            <p className="text-[10px] text-[#C4A898] mt-0.5">Updated {new Date(project.updated_at).toLocaleDateString()}</p>
-          </div>
-          <Link href={`/projects`} className="opacity-0 group-hover:opacity-100 transition-opacity">
-            <ArrowRight className="w-4 h-4 text-[#FF7A00]" />
-          </Link>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
 export default function DashboardPage() {
   const { user } = useUser()
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
 
-  const stats = MOCK_STATS
-  const creditsPercent = Math.round((stats.credits_used / stats.credits_limit) * 100)
+  const creditsRemaining = stats.credits_limit - stats.credits_used
+  const creditsPercent = stats.credits_limit > 0
+    ? Math.round((stats.credits_used / stats.credits_limit) * 100)
+    : 0
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -130,7 +67,7 @@ export default function DashboardPage() {
           <p className="text-[#9A7560] text-sm mt-1">
             You have{" "}
             <span className="font-bold text-[#FF7A00]">
-              {stats.credits_limit - stats.credits_used} credits
+              {creditsRemaining} credits
             </span>{" "}
             remaining this month.
           </p>
@@ -147,16 +84,16 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div {...fade(0.04)}>
-          <StatCard icon={Wand2} label="Total Generated" value={stats.total_thumbnails.toString()} sub="+24 this week" color="text-[#FF7A00]" bg="bg-[#FF7A00]/8" />
+          <StatCard icon={Wand2} label="Total Generated" value={stats.total_thumbnails.toString()} sub="No thumbnails yet" color="text-[#FF7A00]" bg="bg-[#FF7A00]/8" />
         </motion.div>
         <motion.div {...fade(0.08)}>
-          <StatCard icon={TrendingUp} label="Avg CTR Score" value={stats.avg_ctr_score.toString()} suffix="%" sub="+3.4% vs last month" color="text-emerald-600" bg="bg-emerald-50" />
+          <StatCard icon={TrendingUp} label="Avg CTR Score" value={stats.avg_ctr_score > 0 ? stats.avg_ctr_score.toString() : "—"} suffix={stats.avg_ctr_score > 0 ? "%" : undefined} sub="No data yet" color="text-emerald-600" bg="bg-emerald-50" />
         </motion.div>
         <motion.div {...fade(0.12)}>
-          <StatCard icon={Zap} label="Credits Used" value={`${stats.credits_used}`} suffix={`/${stats.credits_limit}`} sub="Resets in 18 days" color="text-blue-600" bg="bg-blue-50" />
+          <StatCard icon={Zap} label="Credits Used" value={`${stats.credits_used}`} suffix={`/${stats.credits_limit}`} sub="Resets monthly" color="text-blue-600" bg="bg-blue-50" />
         </motion.div>
         <motion.div {...fade(0.16)}>
-          <StatCard icon={FolderOpen} label="Active Projects" value={stats.active_projects.toString()} sub="5 with activity" color="text-purple-600" bg="bg-purple-50" />
+          <StatCard icon={FolderOpen} label="Active Projects" value={stats.active_projects.toString()} sub="No projects yet" color="text-purple-600" bg="bg-purple-50" />
         </motion.div>
       </div>
 
@@ -166,7 +103,7 @@ export default function DashboardPage() {
           <div>
             <h3 className="font-black text-sm text-[#2D1C12]">Monthly Usage</h3>
             <p className="text-xs text-[#9A7560] mt-0.5">
-              {stats.credits_used} of {stats.credits_limit} credits · resets in 18 days
+              {stats.credits_used} of {stats.credits_limit} credits used
             </p>
           </div>
           <Link href="/billing" className="text-xs font-bold text-[#FF7A00] hover:underline">
@@ -183,7 +120,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center justify-between mt-2">
           <span className="text-[11px] text-[#9A7560]">{creditsPercent}% used</span>
-          <span className="text-[11px] text-[#9A7560]">{stats.credits_limit - stats.credits_used} remaining</span>
+          <span className="text-[11px] text-[#9A7560]">{creditsRemaining} remaining</span>
         </div>
       </motion.div>
 
@@ -193,15 +130,19 @@ export default function DashboardPage() {
         <div>
           <motion.div {...fade(0.25)} className="flex items-center justify-between mb-4">
             <h2 className="font-black text-[#2D1C12]">Recent Thumbnails</h2>
-            <Link href="/projects" className="text-sm text-[#FF7A00] font-bold flex items-center gap-1 hover:underline">
-              View all <ArrowRight className="w-3.5 h-3.5" />
+          </motion.div>
+          <motion.div {...fade(0.28)} className="bg-white rounded-2xl border border-[#EAD9CC]/60 border-dashed flex flex-col items-center justify-center text-center py-16 px-6 gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#FFF7EF] flex items-center justify-center">
+              <ImageIcon className="w-6 h-6 text-[#FF7A00]" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="font-black text-[#2D1C12]">No thumbnails yet</p>
+              <p className="text-sm text-[#9A7560] mt-1">Generate your first thumbnail to see it here.</p>
+            </div>
+            <Link href="/generate" className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF7A00] text-white font-bold text-sm hover:bg-[#e56e00] transition-all">
+              <Wand2 className="w-3.5 h-3.5" /> Generate
             </Link>
           </motion.div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {MOCK_THUMBNAILS.slice(0, 8).map((t, i) => (
-              <ThumbnailMini key={t.id} thumb={t} delay={0.28 + i * 0.04} />
-            ))}
-          </div>
         </div>
 
         {/* Projects + actions */}
@@ -228,26 +169,16 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* Recent projects */}
+          {/* Projects */}
           <div>
             <motion.div {...fade(0.32)} className="flex items-center justify-between mb-3">
               <h2 className="font-black text-[#2D1C12]">Projects</h2>
               <Link href="/projects" className="text-sm text-[#FF7A00] font-bold hover:underline">View all</Link>
             </motion.div>
-            <div className="space-y-2">
-              {MOCK_PROJECTS.slice(0, 3).map((p, i) => (
-                <motion.div key={p.id} {...fade(0.36 + i * 0.05)}>
-                  <Link href="/projects" className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border border-[#EAD9CC]/60 hover:border-[#FF7A00]/20 hover:shadow-sm transition-all group">
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${MOCK_THUMBNAILS.find(t => t.id === p.cover_thumbnail_id)?.preview_gradient ?? "from-[#F5EDE3] to-[#EAD9CC]"} flex-shrink-0`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-[#2D1C12] truncate">{p.title}</p>
-                      <p className="text-[10px] text-[#9A7560]">{p.thumbnail_count} thumbnails</p>
-                    </div>
-                    {p.is_favorite && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
+            <motion.div {...fade(0.36)} className="rounded-2xl border border-dashed border-[#EAD9CC] bg-white px-4 py-8 text-center">
+              <p className="text-sm font-bold text-[#2D1C12]">No projects yet</p>
+              <p className="text-[11px] text-[#9A7560] mt-1">Create a project to organize your thumbnails.</p>
+            </motion.div>
           </div>
 
           {/* Upgrade CTA */}

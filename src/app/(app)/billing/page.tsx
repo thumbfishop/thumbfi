@@ -5,7 +5,6 @@ import { motion } from "framer-motion"
 import { Check, Zap, Crown, Star, Building2, ArrowRight, Wallet } from "lucide-react"
 import Link from "next/link"
 import { PLANS } from "@/types"
-import { MOCK_USER } from "@/lib/mock/data"
 
 const fade = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
@@ -63,7 +62,10 @@ const PLAN_FEATURES: Record<string, string[]> = {
 
 export default function BillingPage() {
   const [paymentMode, setPaymentMode] = useState<"usd" | "thumb">("usd")
-  const currentPlan = MOCK_USER.plan
+  // Everyone starts on the Free plan until a real subscription exists.
+  const currentPlan = "free"
+  const creditsUsed = 0
+  const creditsLimit = 20
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
@@ -88,10 +90,10 @@ export default function BillingPage() {
         </div>
         <div className="flex items-center gap-4">
           <div className="text-sm text-[#9A7560]">
-            <span className="font-bold text-[#2D1C12]">134</span> / 200 credits used this month
+            <span className="font-bold text-[#2D1C12]">{creditsUsed}</span> / {creditsLimit} credits used this month
           </div>
           <div className="h-2 w-28 bg-[#F5EDE3] rounded-full overflow-hidden">
-            <div className="h-full bg-[#FF7A00] rounded-full" style={{ width: "67%" }} />
+            <div className="h-full bg-[#FF7A00] rounded-full" style={{ width: `${creditsLimit > 0 ? Math.round((creditsUsed / creditsLimit) * 100) : 0}%` }} />
           </div>
         </div>
         <Link href="/settings" className="text-sm font-bold text-[#FF7A00] hover:underline flex items-center gap-1">

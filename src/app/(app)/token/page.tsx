@@ -1,9 +1,12 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Wallet, TrendingUp, Zap, ArrowUpRight, ArrowDownLeft, Gift, Lock, Copy, ExternalLink, Star } from "lucide-react"
-import { MOCK_USER, MOCK_TRANSACTIONS } from "@/lib/mock/data"
-import Link from "next/link"
+import { Wallet, TrendingUp, Gift, Lock, Star, Receipt, ArrowUpRight, ArrowDownLeft } from "lucide-react"
+import type { WalletTransaction } from "@/types"
+
+// No wallet connected / no on-chain activity yet.
+const TRANSACTIONS: WalletTransaction[] = []
+const BALANCE = 0
 
 const fade = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
@@ -34,52 +37,11 @@ function getNextTier(balance: number) {
   return null
 }
 
-function TransactionRow({ tx, index }: { tx: typeof MOCK_TRANSACTIONS[0]; index: number }) {
-  const isPositive = tx.amount > 0
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.05 }}
-      className="flex items-center gap-4 px-4 py-3.5 bg-white rounded-xl border border-[#EAD9CC]/60 hover:border-[#FF7A00]/20 hover:shadow-sm transition-all"
-    >
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-        tx.type === "earn" ? "bg-emerald-50" :
-        tx.type === "spend" ? "bg-red-50" :
-        "bg-amber-50"
-      }`}>
-        {tx.type === "earn"   && <ArrowDownLeft  className="w-4 h-4 text-emerald-600" />}
-        {tx.type === "spend"  && <ArrowUpRight   className="w-4 h-4 text-red-500" />}
-        {tx.type === "reward" && <Gift           className="w-4 h-4 text-amber-500" />}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-[#2D1C12] truncate">{tx.description}</p>
-        <p className="text-[11px] text-[#9A7560] mt-0.5">
-          {new Date(tx.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-          {tx.tx_hash && (
-            <span className="ml-2 inline-flex items-center gap-0.5">
-              <span className="font-mono text-[10px]">{tx.tx_hash}</span>
-              <ExternalLink className="w-2.5 h-2.5" />
-            </span>
-          )}
-        </p>
-      </div>
-      <div className={`font-black text-sm ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
-        {isPositive ? "+" : ""}{tx.amount.toLocaleString()} THUMB
-      </div>
-    </motion.div>
-  )
-}
-
 export default function TokenPage() {
-  const balance = MOCK_USER.thumb_balance
+  const balance = BALANCE
   const currentTier = getTier(balance)
   const nextTier = getNextTier(balance)
   const progressToNext = nextTier ? Math.min(100, Math.round((balance / nextTier.threshold) * 100)) : 100
-
-  const mockWalletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
-  const shortAddr = `${mockWalletAddress.slice(0, 6)}...${mockWalletAddress.slice(-4)}`
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
@@ -132,16 +94,14 @@ export default function TokenPage() {
               </div>
             )}
 
+            {/* Wallet connect */}
             <div className="flex items-center gap-2 mt-5">
               <div className="flex-1 bg-white/10 rounded-xl px-3 py-2.5 flex items-center gap-2">
                 <Wallet className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
-                <span className="text-white/60 font-mono text-xs flex-1 truncate">{shortAddr}</span>
-                <button className="text-white/40 hover:text-white/80 transition-colors">
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
+                <span className="text-white/50 text-xs flex-1 truncate">No wallet connected</span>
               </div>
-              <button className="w-10 h-10 rounded-xl bg-[#FF7A00] flex items-center justify-center hover:bg-[#e56e00] transition-colors">
-                <ExternalLink className="w-4 h-4 text-white" />
+              <button className="px-4 h-10 rounded-xl bg-[#FF7A00] flex items-center justify-center hover:bg-[#e56e00] transition-colors text-white text-xs font-bold">
+                Connect
               </button>
             </div>
           </div>
@@ -207,13 +167,46 @@ export default function TokenPage() {
       <motion.div {...fade(0.24)}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-black text-[#2D1C12]">Transaction History</h2>
-          <button className="text-sm text-[#FF7A00] font-bold hover:underline">View all</button>
         </div>
-        <div className="space-y-2">
-          {MOCK_TRANSACTIONS.map((tx, i) => (
-            <TransactionRow key={tx.id} tx={tx} index={i} />
-          ))}
-        </div>
+        {TRANSACTIONS.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 gap-3 text-center bg-white rounded-2xl border border-dashed border-[#EAD9CC]">
+            <div className="w-12 h-12 rounded-2xl bg-[#F5EDE3] flex items-center justify-center">
+              <Receipt className="w-6 h-6 text-[#C4A898]" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="font-black text-[#2D1C12]">No transactions yet</p>
+              <p className="text-sm text-[#9A7560] mt-1">Connect a wallet to start earning and spending $THUMB.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {TRANSACTIONS.map((tx, i) => {
+              const isPositive = tx.amount > 0
+              return (
+                <motion.div
+                  key={tx.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.35, delay: i * 0.05 }}
+                  className="flex items-center gap-4 px-4 py-3.5 bg-white rounded-xl border border-[#EAD9CC]/60"
+                >
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isPositive ? "bg-emerald-50" : "bg-red-50"}`}>
+                    {isPositive ? <ArrowDownLeft className="w-4 h-4 text-emerald-600" /> : <ArrowUpRight className="w-4 h-4 text-red-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#2D1C12] truncate">{tx.description}</p>
+                    <p className="text-[11px] text-[#9A7560] mt-0.5">
+                      {new Date(tx.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                  <div className={`font-black text-sm ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                    {isPositive ? "+" : ""}{tx.amount.toLocaleString()} THUMB
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
       </motion.div>
 
       {/* CTA */}

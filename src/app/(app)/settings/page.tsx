@@ -6,7 +6,7 @@ import {
   User, Bell, Shield, Wallet, CreditCard, Camera, Check,
   Eye, EyeOff
 } from "lucide-react"
-import { MOCK_USER } from "@/lib/mock/data"
+import { useUser } from "@clerk/nextjs"
 
 const TABS = [
   { key: "profile",       label: "Profile",       icon: User },
@@ -31,10 +31,14 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
 }
 
 function ProfileTab() {
-  const [name, setName] = useState(MOCK_USER.name)
-  const [username, setUsername] = useState("alexcreator")
-  const [bio, setBio] = useState("YouTube creator · Crypto, Finance, and AI")
-  const [website, setWebsite] = useState("https://youtube.com/@alexcreator")
+  const { user } = useUser()
+  const clerkName = user?.fullName ?? user?.firstName ?? ""
+  const clerkEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? ""
+
+  const [name, setName] = useState(clerkName)
+  const [username, setUsername] = useState(user?.username ?? "")
+  const [bio, setBio] = useState("")
+  const [website, setWebsite] = useState("")
   const [saved, setSaved] = useState(false)
 
   const handleSave = async () => {
@@ -48,15 +52,15 @@ function ProfileTab() {
       <div className="flex items-center gap-5">
         <div className="relative">
           <div className="w-16 h-16 rounded-2xl bg-[#FF7A00] flex items-center justify-center text-white font-black text-2xl">
-            {name[0]}
+            {(name?.[0] ?? clerkEmail?.[0] ?? "?").toUpperCase()}
           </div>
           <button className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border-2 border-[#EAD9CC] flex items-center justify-center hover:border-[#FF7A00] transition-colors">
             <Camera className="w-3 h-3 text-[#9A7560]" />
           </button>
         </div>
         <div>
-          <p className="font-bold text-[#2D1C12] text-sm">{name}</p>
-          <p className="text-xs text-[#9A7560]">{MOCK_USER.email}</p>
+          <p className="font-bold text-[#2D1C12] text-sm">{name || "Your name"}</p>
+          <p className="text-xs text-[#9A7560]">{clerkEmail || "—"}</p>
           <button className="text-[11px] font-bold text-[#FF7A00] hover:underline mt-0.5">Upload photo</button>
         </div>
       </div>
@@ -189,22 +193,9 @@ function SecurityTab() {
       </div>
       <div>
         <p className="text-[11px] font-black text-[#2D1C12] uppercase tracking-wider mb-3">Active Sessions</p>
-        <div className="space-y-2">
-          {[
-            { device: "MacBook Pro · Chrome",  location: "San Francisco, US", current: true,  time: "Active now" },
-            { device: "iPhone 15 · Safari",    location: "San Francisco, US", current: false, time: "2 days ago" },
-          ].map(s => (
-            <div key={s.device} className="flex items-center justify-between px-4 py-3 bg-[#FFF7EF] rounded-xl">
-              <div>
-                <p className="text-sm font-semibold text-[#2D1C12]">{s.device}</p>
-                <p className="text-[11px] text-[#9A7560]">{s.location} · {s.time}</p>
-              </div>
-              {s.current
-                ? <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">Current</span>
-                : <button className="text-[11px] font-bold text-red-500">Revoke</button>
-              }
-            </div>
-          ))}
+        <div className="px-4 py-4 bg-[#FFF7EF] rounded-xl">
+          <p className="text-sm font-semibold text-[#2D1C12]">This device</p>
+          <p className="text-[11px] text-[#9A7560]">You&apos;re signed in on this device. Session management is handled by your account provider.</p>
         </div>
       </div>
     </div>
@@ -212,22 +203,17 @@ function SecurityTab() {
 }
 
 function WalletTab() {
-  const addr = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
   return (
     <div className="space-y-6">
       <div>
         <p className="text-[11px] font-black text-[#2D1C12] uppercase tracking-wider mb-3">Connected Wallet</p>
         <div className="flex items-center justify-between px-4 py-4 bg-[#FFF7EF] rounded-xl">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center"><Wallet className="w-4 h-4 text-[#FF7A00]" /></div>
+            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center"><Wallet className="w-4 h-4 text-[#9A7560]" /></div>
             <div>
-              <p className="text-sm font-bold text-[#2D1C12]">MetaMask</p>
-              <p className="text-[11px] font-mono text-[#9A7560]">{addr.slice(0,10)}...{addr.slice(-6)}</p>
+              <p className="text-sm font-bold text-[#2D1C12]">No wallet connected</p>
+              <p className="text-[11px] text-[#9A7560]">Connect a wallet to manage $THUMB and pay with tokens.</p>
             </div>
-          </div>
-          <div className="flex gap-3 items-center">
-            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">Connected</span>
-            <button className="text-[11px] font-bold text-red-500">Disconnect</button>
           </div>
         </div>
       </div>
@@ -253,35 +239,19 @@ function BillingTab() {
         <p className="text-[11px] font-black text-[#2D1C12] uppercase tracking-wider mb-3">Payment Method</p>
         <div className="flex items-center justify-between px-4 py-4 bg-[#FFF7EF] rounded-xl">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center"><CreditCard className="w-4 h-4 text-[#6B3F2A]" /></div>
+            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center"><CreditCard className="w-4 h-4 text-[#9A7560]" /></div>
             <div>
-              <p className="text-sm font-bold text-[#2D1C12]">Visa •••• 4242</p>
-              <p className="text-[11px] text-[#9A7560]">Expires 12/2027</p>
+              <p className="text-sm font-bold text-[#2D1C12]">No payment method</p>
+              <p className="text-[11px] text-[#9A7560]">Add a card when you upgrade to a paid plan.</p>
             </div>
           </div>
-          <button className="text-sm font-bold text-[#FF7A00] hover:underline">Update</button>
         </div>
       </div>
       <div>
         <p className="text-[11px] font-black text-[#2D1C12] uppercase tracking-wider mb-3">Billing History</p>
-        <div className="space-y-2">
-          {[
-            { date: "Jun 1, 2025", desc: "Creator Plan – Monthly", amount: "$9.00" },
-            { date: "May 1, 2025", desc: "Creator Plan – Monthly", amount: "$9.00" },
-            { date: "Apr 1, 2025", desc: "Creator Plan – Monthly", amount: "$9.00" },
-          ].map(inv => (
-            <div key={inv.date} className="flex items-center justify-between px-4 py-3 bg-[#FFF7EF] rounded-xl">
-              <div>
-                <p className="text-sm font-semibold text-[#2D1C12]">{inv.desc}</p>
-                <p className="text-[11px] text-[#9A7560]">{inv.date}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-bold text-sm text-[#2D1C12]">{inv.amount}</span>
-                <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">PAID</span>
-                <button className="text-[11px] font-bold text-[#9A7560] hover:text-[#FF7A00]">PDF</button>
-              </div>
-            </div>
-          ))}
+        <div className="px-4 py-6 bg-[#FFF7EF] rounded-xl text-center">
+          <p className="text-sm font-semibold text-[#2D1C12]">No invoices yet</p>
+          <p className="text-[11px] text-[#9A7560] mt-1">You&apos;re on the Free plan — invoices appear here after your first payment.</p>
         </div>
       </div>
     </div>
