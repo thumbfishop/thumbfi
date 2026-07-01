@@ -13,6 +13,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import type { EditorTool, EditorElement } from "@/types"
 import { renderCanvasToDataUrl, downloadDataUrl } from "@/lib/editor/export"
+import { getThumbnailAction, saveThumbnailCanvasAction } from "@/lib/actions/thumbnails"
 
 const TOOLS: { key: EditorTool; icon: React.ElementType; label: string }[] = [
   { key: "select",    icon: MousePointer2, label: "Select (V)" },
@@ -105,8 +106,10 @@ export default function EditorPage() {
   const {
     elements, selectedId, tool, zoom, background,
     setTool, setZoom, setBackground, addElement, updateElement,
-    removeElement, selectElement, bringForward, sendBackward, isDirty, markSaved
+    removeElement, selectElement, bringForward, sendBackward, isDirty, markSaved,
+    setElements,
   } = useEditorStore()
+  const thumbnailId = (params?.id as string) ?? ""
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState<{ id: string; startX: number; startY: number; elX: number; elY: number } | null>(null)
@@ -184,12 +187,43 @@ export default function EditorPage() {
     }
   }, [tool, zoom, elements.length, addElement, selectElement, setTool])
 
+  const [saving, setSaving] = useState(false)
+
   const handleSave = async () => {
-    await new Promise(r => setTimeout(r, 500))
-    markSaved()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    if (!thumbnailId || saving) return
+    setSaving(true)
+    try {
+      await saveThumbnailCanvasAction(thumbnailId, {
+        elements, background, width: CANVAS_W, height: CANVAS_H, zoom,
+      })
+      markSaved()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      console.error("Save failed", e)
+    } finally {
+      setSaving(false)
+    }
   }
+
+  // Load any previously-saved canvas for this thumbnail.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!thumbnailId) return
+      try {
+        const thumb = await getThumbnailAction(thumbnailId)
+        if (active && thumb?.editor_state?.elements) {
+          setElements(thumb.editor_state.elements)
+          if (thumb.editor_state.background) setBackground(thumb.editor_state.background)
+          markSaved()
+        }
+      } catch {
+        /* new/unsaved canvas — start blank */
+      }
+    })()
+    return () => { active = false }
+  }, [thumbnailId, setElements, setBackground, markSaved])
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -254,12 +288,13 @@ export default function EditorPage() {
         {/* Save + Export */}
         <button
           onClick={handleSave}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+          disabled={saving}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-60 ${
             saved ? "bg-emerald-500 text-white" : isDirty ? "bg-[#FF7A00] text-white" : "border border-[#EAD9CC] text-[#9A7560]"
           }`}
         >
           <Save className="w-3.5 h-3.5" />
-          {saved ? "Saved!" : isDirty ? "Save" : "Saved"}
+          {saving ? "Saving…" : saved ? "Saved!" : isDirty ? "Save" : "Saved"}
         </button>
         <div className="relative">
           <button

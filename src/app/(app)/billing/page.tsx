@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
+import { useQuery } from "@tanstack/react-query"
 import { Check, Zap, Crown, Star, Building2, ArrowRight, Wallet } from "lucide-react"
 import Link from "next/link"
 import { PLANS } from "@/types"
+import { getCurrentUserAction } from "@/lib/actions/account"
 
 const fade = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
@@ -62,10 +64,10 @@ const PLAN_FEATURES: Record<string, string[]> = {
 
 export default function BillingPage() {
   const [paymentMode, setPaymentMode] = useState<"usd" | "thumb">("usd")
-  // Everyone starts on the Free plan until a real subscription exists.
-  const currentPlan = "free"
-  const creditsUsed = 0
-  const creditsLimit = 20
+  const { data: user } = useQuery({ queryKey: ["current-user"], queryFn: () => getCurrentUserAction() })
+  const currentPlan = user?.plan ?? "free"
+  const creditsUsed = user?.credits_used ?? 0
+  const creditsLimit = user?.credits_limit ?? 20
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
