@@ -1,31 +1,37 @@
--- ThumbFi Initial Schema
--- Run in Supabase SQL Editor or via `supabase db push`
+-- ThumbFi Initial Schema (Clerk-native)
+-- Run in the Supabase SQL Editor or via `supabase db push`.
+--
+-- Auth model: Clerk is the identity provider. `users.id` stores the Clerk
+-- user id (e.g. "user_2ab..."), NOT a Supabase-auth UUID. All application
+-- access happens server-side through the Supabase SERVICE ROLE key (which
+-- bypasses RLS), with ownership enforced in app code via the Clerk userId.
+--
+-- RLS is left ENABLED on every user table with NO permissive policy for the
+-- anon/authenticated roles, so the public anon key cannot read or write user
+-- data even if it leaks to the browser. Only the service role (server) can.
+-- Templates are the one exception: publicly readable.
 
--- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ─── Users ────────────────────────────────────────────────────────────────────
 CREATE TABLE users (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email       TEXT UNIQUE NOT NULL,
-  name        TEXT NOT NULL DEFAULT '',
-  avatar_url  TEXT,
-  plan        TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'creator', 'pro', 'enterprise')),
+  id            TEXT PRIMARY KEY,                 -- Clerk user id
+  email         TEXT UNIQUE NOT NULL,
+  name          TEXT NOT NULL DEFAULT '',
+  avatar_url    TEXT,
+  plan          TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'creator', 'pro', 'enterprise')),
   thumb_balance INTEGER NOT NULL DEFAULT 0,
   credits_used  INTEGER NOT NULL DEFAULT 0,
-  credits_limit INTEGER NOT NULL DEFAULT 10,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  credits_limit INTEGER NOT NULL DEFAULT 20,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view and update their own profile"
-  ON users FOR ALL USING (auth.uid() = id);
 
 -- ─── Projects ─────────────────────────────────────────────────────────────────
 CREATE TABLE projects (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title               TEXT NOT NULL,
   description         TEXT,
   thumbnail_count     INTEGER NOT NULL DEFAULT 0,
@@ -35,17 +41,13 @@ CREATE TABLE projects (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users manage own projects"
-  ON projects FOR ALL USING (auth.uid() = user_id);
-
 CREATE INDEX idx_projects_user_id ON projects(user_id);
 
 -- ─── Thumbnail Generations ────────────────────────────────────────────────────
 CREATE TABLE thumbnail_generations (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   project_id    UUID REFERENCES projects(id) ON DELETE SET NULL,
   prompt        TEXT NOT NULL,
   style         TEXT NOT NULL,
@@ -58,19 +60,15 @@ CREATE TABLE thumbnail_generations (
   status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'done', 'error')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE thumbnail_generations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users view own generations"
-  ON thumbnail_generations FOR ALL USING (auth.uid() = user_id);
-
 CREATE INDEX idx_generations_user_id ON thumbnail_generations(user_id);
 
 -- ─── Thumbnails ───────────────────────────────────────────────────────────────
 CREATE TABLE thumbnails (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   project_id        UUID REFERENCES projects(id) ON DELETE SET NULL,
-  user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  generation_id     UUID NOT NULL REFERENCES thumbnail_generations(id) ON DELETE CASCADE,
+  user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  generation_id     UUID REFERENCES thumbnail_generations(id) ON DELETE CASCADE,
   prompt            TEXT NOT NULL,
   title             TEXT NOT NULL DEFAULT '',
   preview_url       TEXT,
@@ -78,7 +76,7 @@ CREATE TABLE thumbnails (
   aspect_ratio      TEXT NOT NULL DEFAULT '16:9',
   style             TEXT NOT NULL,
   category          TEXT NOT NULL,
-  tone              TEXT NOT NULL,
+  tone              TEXT NOT NULL DEFAULT 'shocking',
   ctr_score         INTEGER NOT NULL DEFAULT 0,
   status            TEXT NOT NULL DEFAULT 'done' CHECK (status IN ('pending', 'done', 'error')),
   is_favorite       BOOLEAN NOT NULL DEFAULT false,
@@ -87,16 +85,12 @@ CREATE TABLE thumbnails (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE thumbnails ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users manage own thumbnails"
-  ON thumbnails FOR ALL USING (auth.uid() = user_id);
-
-CREATE INDEX idx_thumbnails_user_id   ON thumbnails(user_id);
-CREATE INDEX idx_thumbnails_project   ON thumbnails(project_id);
+CREATE INDEX idx_thumbnails_user_id    ON thumbnails(user_id);
+CREATE INDEX idx_thumbnails_project    ON thumbnails(project_id);
 CREATE INDEX idx_thumbnails_generation ON thumbnails(generation_id);
 
--- ─── Templates ────────────────────────────────────────────────────────────────
+-- ─── Templates (publicly readable) ────────────────────────────────────────────
 CREATE TABLE templates (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title             TEXT NOT NULL,
@@ -110,8 +104,6 @@ CREATE TABLE templates (
   is_premium        BOOLEAN NOT NULL DEFAULT false,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- Templates are publicly readable
 ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Templates are publicly readable"
   ON templates FOR SELECT USING (true);
@@ -119,24 +111,23 @@ CREATE POLICY "Templates are publicly readable"
 -- ─── Subscriptions ────────────────────────────────────────────────────────────
 CREATE TABLE subscriptions (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
   plan            TEXT NOT NULL DEFAULT 'free',
   payment_method  TEXT DEFAULT 'usd',
-  stripe_id       TEXT,
-  status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'canceled', 'past_due')),
+  stripe_customer_id     TEXT,
+  stripe_subscription_id TEXT,
+  status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'canceled', 'past_due', 'trialing')),
   current_period_start TIMESTAMPTZ,
   current_period_end   TIMESTAMPTZ,
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users view own subscription"
-  ON subscriptions FOR ALL USING (auth.uid() = user_id);
 
 -- ─── Wallets ──────────────────────────────────────────────────────────────────
 CREATE TABLE wallets (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
   address         TEXT,
   thumb_balance   INTEGER NOT NULL DEFAULT 0,
   staked_amount   INTEGER NOT NULL DEFAULT 0,
@@ -144,54 +135,42 @@ CREATE TABLE wallets (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users manage own wallet"
-  ON wallets FOR ALL USING (auth.uid() = user_id);
 
 -- ─── Wallet Transactions ──────────────────────────────────────────────────────
 CREATE TABLE wallet_transactions (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   type        TEXT NOT NULL CHECK (type IN ('earn', 'spend', 'reward', 'stake', 'unstake')),
   amount      INTEGER NOT NULL,
   description TEXT NOT NULL,
   tx_hash     TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE wallet_transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users view own transactions"
-  ON wallet_transactions FOR ALL USING (auth.uid() = user_id);
-
 CREATE INDEX idx_transactions_user_id ON wallet_transactions(user_id);
 
 -- ─── Referrals ────────────────────────────────────────────────────────────────
 CREATE TABLE referrals (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  referrer_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  referred_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  referrer_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  referred_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
   reward_claimed  BOOLEAN NOT NULL DEFAULT false,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users view own referrals"
-  ON referrals FOR SELECT USING (auth.uid() = referrer_id);
 
 -- ─── Credits Ledger ───────────────────────────────────────────────────────────
 CREATE TABLE credits_ledger (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  delta       INTEGER NOT NULL,
-  reason      TEXT NOT NULL,
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  delta         INTEGER NOT NULL,
+  reason        TEXT NOT NULL,
   generation_id UUID REFERENCES thumbnail_generations(id),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE credits_ledger ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users view own credits"
-  ON credits_ledger FOR SELECT USING (auth.uid() = user_id);
+CREATE INDEX idx_credits_user_id ON credits_ledger(user_id);
 
 -- ─── Triggers: update updated_at ──────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -214,7 +193,7 @@ BEGIN
   IF TG_OP = 'INSERT' AND NEW.project_id IS NOT NULL THEN
     UPDATE projects SET thumbnail_count = thumbnail_count + 1 WHERE id = NEW.project_id;
   ELSIF TG_OP = 'DELETE' AND OLD.project_id IS NOT NULL THEN
-    UPDATE projects SET thumbnail_count = thumbnail_count - 1 WHERE id = OLD.project_id;
+    UPDATE projects SET thumbnail_count = GREATEST(thumbnail_count - 1, 0) WHERE id = OLD.project_id;
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
@@ -224,17 +203,7 @@ CREATE TRIGGER sync_thumbnail_count
   AFTER INSERT OR DELETE ON thumbnails
   FOR EACH ROW EXECUTE FUNCTION sync_project_thumbnail_count();
 
--- ─── Trigger: keep user credits_used in sync ─────────────────────────────────
-CREATE OR REPLACE FUNCTION sync_user_credits()
-RETURNS TRIGGER AS $$
-BEGIN
-  UPDATE users
-  SET credits_used = credits_used + NEW.credits_used
-  WHERE id = NEW.user_id;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER sync_user_credits_on_generation
-  AFTER INSERT ON thumbnail_generations
-  FOR EACH ROW EXECUTE FUNCTION sync_user_credits();
+-- ─── Storage bucket for generated thumbnails ──────────────────────────────────
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('thumbnails', 'thumbnails', true)
+ON CONFLICT (id) DO NOTHING;
