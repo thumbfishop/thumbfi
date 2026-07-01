@@ -1,26 +1,173 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: #FFF7EF;
+  --foreground: #2D1C12;
+  --card: #FFFFFF;
+  --card-foreground: #2D1C12;
+  --primary: #FF7A00;
+  --primary-foreground: #FFFFFF;
+  --secondary: #FFF0E0;
+  --secondary-foreground: #2D1C12;
+  --muted: #F5EDE3;
+  --muted-foreground: #9A7560;
+  --accent: #FFF0E0;
+  --accent-foreground: #2D1C12;
+  --destructive: #e53e3e;
+  --border: #EAD9CC;
+  --input: #EAD9CC;
+  --ring: #FF7A00;
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body {
+    @apply antialiased;
+    background-color: #FFF7EF;
+    color: #2D1C12;
+    overflow-x: hidden;
   }
+  html { scroll-behavior: smooth; }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─── Gradient text ─────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #FF7A00 0%, #FF4500 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-gold {
+  background: linear-gradient(135deg, #F59E0B 0%, #FF7A00 50%, #EF4444 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Glass morphism ────────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.glass-dark {
+  background: rgba(45, 28, 18, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 122, 0, 0.15);
+}
+.glass-orange {
+  background: rgba(255, 122, 0, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 122, 0, 0.25);
+}
+
+/* ─── Glow effects ──────────────────────────────────────────── */
+.glow-orange { box-shadow: 0 0 60px rgba(255, 122, 0, 0.3), 0 0 120px rgba(255, 122, 0, 0.1); }
+.glow-sm { box-shadow: 0 0 20px rgba(255, 122, 0, 0.2); }
+.glow-card { box-shadow: 0 20px 60px rgba(45, 28, 18, 0.08), 0 4px 20px rgba(45, 28, 18, 0.06); }
+
+/* ─── Card hover lift ───────────────────────────────────────── */
+.card-lift { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease; }
+.card-lift:hover { transform: translateY(-5px); box-shadow: 0 24px 64px rgba(45, 28, 18, 0.12); }
+
+/* ─── Noise texture ─────────────────────────────────────────── */
+.noise-bg {
+  position: relative;
+}
+.noise-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Dot grid ──────────────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(255,122,0,0.18) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #FFF7EF; }
+::-webkit-scrollbar-thumb { background: #EAD9CC; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #FF7A00; }
+
+/* ─── Animations ────────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-14px); }
+}
+@keyframes floatB {
+  0%, 100% { transform: translateY(-8px) rotate(-1deg); }
+  50% { transform: translateY(6px) rotate(1deg); }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255,122,0,0.2); }
+  50% { box-shadow: 0 0 50px rgba(255,122,0,0.5); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-float-b { animation: floatB 5.5s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%);
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }
+.cursor-blink { animation: cursor-blink 1s step-end infinite; }
+
+/* ─── Premium section backgrounds ──────────────────────────── */
+.section-glow {
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,122,0,0.08) 0%, transparent 70%);
 }
