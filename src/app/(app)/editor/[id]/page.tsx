@@ -116,21 +116,37 @@ export default function EditorPage() {
   const [saved, setSaved] = useState(false)
   const [activePanel, setActivePanel] = useState<"layers" | "properties">("layers")
   const [exportMenu, setExportMenu] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const selectedEl = elements.find(e => e.id === selectedId)
 
-  const handleExport = (format: "png" | "jpeg") => {
+  // Drag-to-move selected element (accounts for canvas zoom).
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: MouseEvent) => {
+      const dx = (e.clientX - dragging.startX) / zoom
+      const dy = (e.clientY - dragging.startY) / zoom
+      updateElement(dragging.id, { x: Math.round(dragging.elX + dx), y: Math.round(dragging.elY + dy) })
+    }
+    const onUp = () => setDragging(null)
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+    return () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+  }, [dragging, zoom, updateElement])
+
+  const handleExport = async (format: "png" | "jpeg") => {
     setExportMenu(false)
-    setTimeout(() => {
-      try {
-        const dataUrl = renderCanvasToDataUrl({
-          elements, background, width: CANVAS_W, height: CANVAS_H, format,
-        })
-        downloadDataUrl(dataUrl, `thumbnail.${format === "jpeg" ? "jpg" : "png"}`)
-      } catch (err) {
-        console.error("Export failed", err)
-      }
-    }, 0)
+    try {
+      const dataUrl = await renderCanvasToDataUrl({
+        elements, background, width: CANVAS_W, height: CANVAS_H, format,
+      })
+      downloadDataUrl(dataUrl, `thumbnail.${format === "jpeg" ? "jpg" : "png"}`)
+    } catch (err) {
+      console.error("Export failed", err)
+    }
   }
 
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
@@ -206,20 +222,32 @@ export default function EditorPage() {
     }
   }
 
-  // Load any previously-saved canvas for this thumbnail.
+  // Load this thumbnail: restore a saved canvas, else seed the generated
+  // image as an editable base layer so users can add text/shapes on top.
   useEffect(() => {
     let active = true
     ;(async () => {
       if (!thumbnailId) return
       try {
         const thumb = await getThumbnailAction(thumbnailId)
-        if (active && thumb?.editor_state?.elements) {
+        if (!active || !thumb) { setElements([]); return }
+        if (thumb.editor_state?.elements?.length) {
           setElements(thumb.editor_state.elements)
           if (thumb.editor_state.background) setBackground(thumb.editor_state.background)
-          markSaved()
+        } else if (thumb.preview_url) {
+          setElements([{
+            id: "base_image",
+            type: "image",
+            src: thumb.preview_url,
+            x: 0, y: 0, width: CANVAS_W, height: CANVAS_H,
+            rotation: 0, opacity: 1, zIndex: 0, visible: true, locked: false,
+          }])
+        } else {
+          setElements([])
         }
+        markSaved()
       } catch {
-        /* new/unsaved canvas — start blank */
+        setElements([])
       }
     })()
     return () => { active = false }
@@ -432,12 +460,32 @@ export default function EditorPage() {
                     {selectedEl.type === "text" && (
                       <div>
                         <p className="text-[10px] font-black text-[#9A7560] uppercase tracking-wider mb-2">Text</p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={selectedEl.fontSize ?? 32}
+                            onChange={e => updateElement(selectedEl.id, { fontSize: Number(e.target.value) })}
+                            className="flex-1 px-2 py-1.5 rounded-lg border border-[#EAD9CC] text-xs text-[#2D1C12] focus:outline-none focus:border-[#FF7A00]"
+                            placeholder="Font size"
+                          />
+                          <input
+                            type="color"
+                            value={selectedEl.color ?? "#FFFFFF"}
+                            onChange={e => updateElement(selectedEl.id, { color: e.target.value })}
+                            title="Text color"
+                            className="w-8 h-8 rounded-lg border border-[#EAD9CC] cursor-pointer bg-white p-0.5"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {(selectedEl.type === "rectangle" || selectedEl.type === "circle") && (
+                      <div>
+                        <p className="text-[10px] font-black text-[#9A7560] uppercase tracking-wider mb-2">Fill</p>
                         <input
-                          type="number"
-                          value={selectedEl.fontSize ?? 32}
-                          onChange={e => updateElement(selectedEl.id, { fontSize: Number(e.target.value) })}
-                          className="w-full px-2 py-1.5 rounded-lg border border-[#EAD9CC] text-xs text-[#2D1C12] focus:outline-none focus:border-[#FF7A00]"
-                          placeholder="Font size"
+                          type="color"
+                          value={selectedEl.color ?? "#FF7A00"}
+                          onChange={e => updateElement(selectedEl.id, { color: e.target.value })}
+                          className="w-full h-8 rounded-lg border border-[#EAD9CC] cursor-pointer bg-white p-0.5"
                         />
                       </div>
                     )}
@@ -496,6 +544,13 @@ export default function EditorPage() {
                 <div
                   key={el.id}
                   onClick={e => { e.stopPropagation(); selectElement(el.id) }}
+                  onMouseDown={e => {
+                    if (tool !== "select" || el.locked || editingId === el.id) return
+                    e.stopPropagation()
+                    selectElement(el.id)
+                    setDragging({ id: el.id, startX: e.clientX, startY: e.clientY, elX: el.x, elY: el.y })
+                  }}
+                  onDoubleClick={e => { if (el.type === "text") { e.stopPropagation(); setEditingId(el.id) } }}
                   style={{
                     position: "absolute",
                     left: el.x,
@@ -505,33 +560,57 @@ export default function EditorPage() {
                     transform: `rotate(${el.rotation}deg)`,
                     opacity: el.opacity,
                     zIndex: el.zIndex,
-                    cursor: el.locked ? "not-allowed" : "move",
+                    cursor: el.locked ? "not-allowed" : dragging?.id === el.id ? "grabbing" : "grab",
                     outline: selectedId === el.id ? "2px solid #FF7A00" : "none",
                     outlineOffset: 2,
                   }}
                 >
+                  {el.type === "image" && el.src && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={el.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
+                  )}
                   {el.type === "text" && (
-                    <p
-                      style={{
-                        color: el.color ?? "#FFFFFF",
-                        fontSize: el.fontSize ?? 32,
-                        fontWeight: el.fontWeight ?? "bold",
-                        textAlign: (el.textAlign as React.CSSProperties["textAlign"]) ?? "center",
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {el.content as string}
-                    </p>
+                    editingId === el.id ? (
+                      <textarea
+                        autoFocus
+                        value={el.content as string}
+                        onChange={e => updateElement(el.id, { content: e.target.value })}
+                        onBlur={() => setEditingId(null)}
+                        onMouseDown={e => e.stopPropagation()}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); setEditingId(null) } }}
+                        style={{
+                          color: el.color ?? "#FFFFFF",
+                          fontSize: el.fontSize ?? 32,
+                          fontWeight: el.fontWeight ?? ("bold" as React.CSSProperties["fontWeight"]),
+                          textAlign: (el.textAlign as React.CSSProperties["textAlign"]) ?? "center",
+                          width: "100%", height: "100%",
+                          background: "transparent",
+                          border: "1px dashed #FF7A00",
+                          outline: "none", resize: "none", padding: 0,
+                          fontFamily: "inherit",
+                        }}
+                      />
+                    ) : (
+                      <p
+                        style={{
+                          color: el.color ?? "#FFFFFF",
+                          fontSize: el.fontSize ?? 32,
+                          fontWeight: el.fontWeight ?? "bold",
+                          textAlign: (el.textAlign as React.CSSProperties["textAlign"]) ?? "center",
+                          width: "100%", height: "100%",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          userSelect: "none",
+                        }}
+                      >
+                        {el.content as string}
+                      </p>
+                    )
                   )}
                   {el.type === "rectangle" && (
-                    <div style={{ width: "100%", height: "100%", backgroundColor: el.color ?? "#FF7A00", borderRadius: 4 }} />
+                    <div style={{ width: "100%", height: "100%", backgroundColor: el.color ?? "#FF7A00", borderRadius: 4, pointerEvents: "none" }} />
                   )}
                   {el.type === "circle" && (
-                    <div style={{ width: "100%", height: "100%", backgroundColor: el.color ?? "#FF7A00", borderRadius: "50%" }} />
+                    <div style={{ width: "100%", height: "100%", backgroundColor: el.color ?? "#FF7A00", borderRadius: "50%", pointerEvents: "none" }} />
                   )}
                 </div>
               ))}

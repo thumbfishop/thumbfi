@@ -50,6 +50,16 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.closePath()
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+}
+
 export interface RenderOptions {
   elements: EditorElement[]
   background: string
@@ -59,7 +69,7 @@ export interface RenderOptions {
 }
 
 /** Render the editor scene to a data URL (image/png or image/jpeg). */
-export function renderCanvasToDataUrl(opts: RenderOptions): string {
+export async function renderCanvasToDataUrl(opts: RenderOptions): Promise<string> {
   const { elements, background, width, height, format } = opts
   const canvas = document.createElement("canvas")
   canvas.width = width
@@ -97,7 +107,25 @@ export function renderCanvasToDataUrl(opts: RenderOptions): string {
       ctx.translate(-cx, -cy)
     }
 
-    if (el.type === "text") {
+    if (el.type === "image" && el.src) {
+      try {
+        const img = await loadImage(el.src)
+        const iw = img.naturalWidth || el.width
+        const ih = img.naturalHeight || el.height
+        const scale = Math.max(el.width / iw, el.height / ih) // cover
+        const dw = iw * scale
+        const dh = ih * scale
+        const dx = el.x + (el.width - dw) / 2
+        const dy = el.y + (el.height - dh) / 2
+        ctx.save()
+        roundRectPath(ctx, el.x, el.y, el.width, el.height, 0)
+        ctx.clip()
+        ctx.drawImage(img, dx, dy, dw, dh)
+        ctx.restore()
+      } catch {
+        /* skip images that fail to load (e.g. CORS) */
+      }
+    } else if (el.type === "text") {
       const size = el.fontSize ?? 32
       const weight = el.fontWeight ?? "bold"
       ctx.fillStyle = el.color ?? "#FFFFFF"
