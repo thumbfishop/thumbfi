@@ -7,7 +7,10 @@ import {
   Sparkles, Image as ImageIcon,
 } from "lucide-react"
 import { useUser } from "@clerk/nextjs"
+import { useQuery } from "@tanstack/react-query"
 import type { DashboardStats } from "@/types"
+import { getDashboardStatsAction } from "@/lib/actions/account"
+import { listThumbnailsAction } from "@/lib/actions/thumbnails"
 
 const fade = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
@@ -15,15 +18,9 @@ const fade = (delay = 0) => ({
   transition: { duration: 0.45, delay },
 })
 
-// No activity yet — real values will come from the backend once connected.
-const stats: DashboardStats = {
-  total_thumbnails: 0,
-  thumbnails_this_month: 0,
-  avg_ctr_score: 0,
-  credits_used: 0,
-  credits_limit: 20,
-  thumb_balance: 0,
-  active_projects: 0,
+const EMPTY_STATS: DashboardStats = {
+  total_thumbnails: 0, thumbnails_this_month: 0, avg_ctr_score: 0,
+  credits_used: 0, credits_limit: 20, thumb_balance: 0, active_projects: 0,
 }
 
 function StatCard({ icon: Icon, label, value, suffix, sub, color, bg }: {
@@ -47,6 +44,15 @@ function StatCard({ icon: Icon, label, value, suffix, sub, color, bg }: {
 
 export default function DashboardPage() {
   const { user } = useUser()
+
+  const { data: stats = EMPTY_STATS } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: () => getDashboardStatsAction(),
+  })
+  const { data: recent = [] } = useQuery({
+    queryKey: ["thumbnails", "recent"],
+    queryFn: () => listThumbnailsAction({ limit: 8 }),
+  })
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
@@ -130,19 +136,46 @@ export default function DashboardPage() {
         <div>
           <motion.div {...fade(0.25)} className="flex items-center justify-between mb-4">
             <h2 className="font-black text-[#2D1C12]">Recent Thumbnails</h2>
+            {recent.length > 0 && (
+              <Link href="/history" className="text-sm text-[#FF7A00] font-bold flex items-center gap-1 hover:underline">
+                View all <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            )}
           </motion.div>
-          <motion.div {...fade(0.28)} className="bg-white rounded-2xl border border-[#EAD9CC]/60 border-dashed flex flex-col items-center justify-center text-center py-16 px-6 gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-[#FFF7EF] flex items-center justify-center">
-              <ImageIcon className="w-6 h-6 text-[#FF7A00]" strokeWidth={1.5} />
+          {recent.length === 0 ? (
+            <motion.div {...fade(0.28)} className="bg-white rounded-2xl border border-[#EAD9CC]/60 border-dashed flex flex-col items-center justify-center text-center py-16 px-6 gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#FFF7EF] flex items-center justify-center">
+                <ImageIcon className="w-6 h-6 text-[#FF7A00]" strokeWidth={1.5} />
+              </div>
+              <div>
+                <p className="font-black text-[#2D1C12]">No thumbnails yet</p>
+                <p className="text-sm text-[#9A7560] mt-1">Generate your first thumbnail to see it here.</p>
+              </div>
+              <Link href="/generate" className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF7A00] text-white font-bold text-sm hover:bg-[#e56e00] transition-all">
+                <Wand2 className="w-3.5 h-3.5" /> Generate
+              </Link>
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {recent.map((t, i) => (
+                <motion.div key={t.id} {...fade(0.28 + Math.min(i * 0.03, 0.3))} className="relative aspect-video rounded-xl overflow-hidden shadow-sm bg-[#F5EDE3] group">
+                  {t.preview_url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={t.preview_url} alt={t.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className={`absolute inset-0 bg-gradient-to-br ${t.preview_gradient || "from-slate-700 to-slate-900"}`} />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-2">
+                    <p className="text-white font-black text-[8px] leading-tight line-clamp-2">{t.title}</p>
+                  </div>
+                  <div className={`absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-white ${t.ctr_score >= 90 ? "bg-emerald-500/90" : "bg-[#FF7A00]/90"}`}>
+                    {t.ctr_score}%
+                  </div>
+                </motion.div>
+              ))}
             </div>
-            <div>
-              <p className="font-black text-[#2D1C12]">No thumbnails yet</p>
-              <p className="text-sm text-[#9A7560] mt-1">Generate your first thumbnail to see it here.</p>
-            </div>
-            <Link href="/generate" className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF7A00] text-white font-bold text-sm hover:bg-[#e56e00] transition-all">
-              <Wand2 className="w-3.5 h-3.5" /> Generate
-            </Link>
-          </motion.div>
+          )}
         </div>
 
         {/* Projects + actions */}

@@ -3,23 +3,20 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   FolderOpen, Plus, Search, Grid3x3, List, Star, MoreHorizontal,
-  Pencil, Trash2, Copy, Archive, SortAsc, Filter, Wand2
+  Pencil, Trash2, Archive, Wand2, Loader2
 } from "lucide-react"
 import type { Project } from "@/types"
-
-// No projects yet — real projects will load from the backend once connected.
-const PROJECTS: Project[] = []
+import { listProjectsAction, createProjectAction, updateProjectAction, deleteProjectAction } from "@/lib/actions/projects"
 
 type SortBy = "updated" | "created" | "name" | "thumbnails"
 type ViewMode = "grid" | "list"
 
-function ProjectMenu({ project, onRename, onDelete, onDuplicate, onArchive, onFavorite }: {
+function ProjectMenu({ project, onDelete, onArchive, onFavorite }: {
   project: Project
-  onRename: () => void
   onDelete: () => void
-  onDuplicate: () => void
   onArchive: () => void
   onFavorite: () => void
 }) {
@@ -45,9 +42,7 @@ function ProjectMenu({ project, onRename, onDelete, onDuplicate, onArchive, onFa
             >
               {[
                 { icon: Star,    label: project.is_favorite ? "Unfavorite" : "Favorite", action: onFavorite },
-                { icon: Pencil,  label: "Rename",    action: onRename },
-                { icon: Copy,    label: "Duplicate", action: onDuplicate },
-                { icon: Archive, label: "Archive",   action: onArchive },
+                { icon: Archive, label: project.status === "archived" ? "Unarchive" : "Archive", action: onArchive },
                 { icon: Trash2,  label: "Delete",    action: onDelete, danger: true },
               ].map(item => (
                 <button
@@ -69,9 +64,10 @@ function ProjectMenu({ project, onRename, onDelete, onDuplicate, onArchive, onFa
   )
 }
 
-function ProjectGridCard({ project, index }: { project: Project; index: number }) {
-  const [fav, setFav] = useState(project.is_favorite)
-
+function ProjectGridCard({ project, index, onFavorite, onArchive, onDelete }: {
+  project: Project; index: number
+  onFavorite: () => void; onArchive: () => void; onDelete: () => void
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -98,14 +94,7 @@ function ProjectGridCard({ project, index }: { project: Project; index: number }
             <h3 className="font-black text-sm text-[#2D1C12] truncate">{project.title}</h3>
             <p className="text-[11px] text-[#9A7560] truncate mt-0.5">{project.description}</p>
           </div>
-          <ProjectMenu
-            project={project}
-            onFavorite={() => setFav(!fav)}
-            onRename={() => {}}
-            onDelete={() => {}}
-            onDuplicate={() => {}}
-            onArchive={() => {}}
-          />
+          <ProjectMenu project={project} onFavorite={onFavorite} onArchive={onArchive} onDelete={onDelete} />
         </div>
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F5EDE3]">
           <div className="flex items-center gap-1 text-[11px] text-[#9A7560]">
@@ -113,7 +102,7 @@ function ProjectGridCard({ project, index }: { project: Project; index: number }
             {project.thumbnail_count} thumbnails
           </div>
           <div className="flex items-center gap-2">
-            {fav && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />}
+            {project.is_favorite && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />}
             <span className="text-[10px] text-[#C4A898]">
               {new Date(project.updated_at).toLocaleDateString()}
             </span>
@@ -124,9 +113,10 @@ function ProjectGridCard({ project, index }: { project: Project; index: number }
   )
 }
 
-function ProjectListRow({ project, index }: { project: Project; index: number }) {
-  const [fav, setFav] = useState(project.is_favorite)
-
+function ProjectListRow({ project, index, onFavorite, onArchive, onDelete }: {
+  project: Project; index: number
+  onFavorite: () => void; onArchive: () => void; onDelete: () => void
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, x: -12 }}
@@ -145,20 +135,14 @@ function ProjectListRow({ project, index }: { project: Project; index: number })
       <div className="hidden md:block text-[11px] text-[#C4A898] flex-shrink-0">
         {new Date(project.updated_at).toLocaleDateString()}
       </div>
-      {fav && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
-      <ProjectMenu
-        project={project}
-        onFavorite={() => setFav(!fav)}
-        onRename={() => {}}
-        onDelete={() => {}}
-        onDuplicate={() => {}}
-        onArchive={() => {}}
-      />
+      {project.is_favorite && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
+      <ProjectMenu project={project} onFavorite={onFavorite} onArchive={onArchive} onDelete={onDelete} />
     </motion.div>
   )
 }
 
 export default function ProjectsPage() {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<SortBy>("updated")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
@@ -166,8 +150,30 @@ export default function ProjectsPage() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [newName, setNewName] = useState("")
 
-  const filtered = PROJECTS
-    .filter(p => showArchived || p.status === "active")
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ["projects", showArchived],
+    queryFn: () => listProjectsAction(showArchived),
+  })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["projects"] })
+
+  const create = useMutation({
+    mutationFn: (title: string) => createProjectAction({ title }),
+    onSuccess: invalidate,
+  })
+  const favorite = useMutation({
+    mutationFn: (p: Project) => updateProjectAction(p.id, { is_favorite: !p.is_favorite }),
+    onSuccess: invalidate,
+  })
+  const archive = useMutation({
+    mutationFn: (p: Project) => updateProjectAction(p.id, { status: p.status === "archived" ? "active" : "archived" }),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteProjectAction(id),
+    onSuccess: invalidate,
+  })
+
+  const filtered = projects
     .filter(p => !search || p.title.toLowerCase().includes(search.toLowerCase()) || p.description?.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       if (sortBy === "name")       return a.title.localeCompare(b.title)
@@ -253,7 +259,11 @@ export default function ProjectsPage() {
       </motion.div>
 
       {/* Grid/List */}
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="w-8 h-8 text-[#FF7A00] animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -270,11 +280,17 @@ export default function ProjectsPage() {
         </motion.div>
       ) : viewMode === "grid" ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((p, i) => <ProjectGridCard key={p.id} project={p} index={i} />)}
+          {filtered.map((p, i) => (
+            <ProjectGridCard key={p.id} project={p} index={i}
+              onFavorite={() => favorite.mutate(p)} onArchive={() => archive.mutate(p)} onDelete={() => remove.mutate(p.id)} />
+          ))}
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((p, i) => <ProjectListRow key={p.id} project={p} index={i} />)}
+          {filtered.map((p, i) => (
+            <ProjectListRow key={p.id} project={p} index={i}
+              onFavorite={() => favorite.mutate(p)} onArchive={() => archive.mutate(p)} onDelete={() => remove.mutate(p.id)} />
+          ))}
         </div>
       )}
 
@@ -315,11 +331,15 @@ export default function ProjectsPage() {
                     />
                   </div>
                   <button
-                    disabled={!newName.trim()}
-                    onClick={() => { setShowNewModal(false); setNewName("") }}
-                    className="w-full py-3 rounded-2xl bg-[#FF7A00] text-white font-bold text-sm hover:bg-[#e56e00] disabled:opacity-40 transition-all"
+                    disabled={!newName.trim() || create.isPending}
+                    onClick={() => {
+                      const title = newName.trim()
+                      if (!title) return
+                      create.mutate(title, { onSuccess: () => { setShowNewModal(false); setNewName("") } })
+                    }}
+                    className="w-full py-3 rounded-2xl bg-[#FF7A00] text-white font-bold text-sm hover:bg-[#e56e00] disabled:opacity-40 transition-all flex items-center justify-center gap-2"
                   >
-                    Create Project
+                    {create.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : "Create Project"}
                   </button>
                 </div>
               </div>
